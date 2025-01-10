@@ -258,13 +258,8 @@ int main(void) {
 
     uint64_t* hostBuffer = (uint64_t*)malloc(2 * OUTPUT_CHUNK_SIZE * sizeof(uint64_t));
 
-
-    //const char* inputDir = "path/to/structure/seeds";
-    //const char* outputDir = "path/to/output";
-
-    const char* inputDir = "C:\\Users\\somerandomuser\\source\\secretlife_stronghold48";
-    const char* outputDir = "C:\\Users\\somerandomuser\\source\\secretlife_stronghold_valid";
-
+    const char* inputDir = "path/to/structure/seeds";
+    const char* outputDir = "path/to/output";
 
     char inputFilePath[256], outputFilePath[256];
     int fileCount = 1;
