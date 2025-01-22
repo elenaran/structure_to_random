@@ -53,28 +53,26 @@ __device__  uint64_t outputBuffer;
   *
   * C port of Geosquare's original Java implementation.
   */
-__device__ bool validSeed(uint64_t a) {
-    int64_t b = 18218081;
-    int64_t c = 1LL << 48;
-    int64_t d = 7847617;
+__device__ bool validSeed(uint64_t worldseed) {
+    // LCG constants
+    const int64_t LCG_MULTIPLIER = INT64_C(25214903917);
+    const int64_t LCG_ADDEND = INT64_C(11);
+    const int64_t LCG_MODULO = INT64_C(1) << 48;
 
-    // To emulate signed 64-bit behavior, cast a to int64_t
-    int64_t a_high = (int64_t)(a >> 32); // Upper 32 bits
-    int64_t a_low = (int64_t)(int32_t)a; // Lower 32 bits, cast to signed int
+    // Break worldseed into upper/lower halves (signed to emulate signed 64-bit behavior)
+    int64_t worldseedUpper32 = static_cast<int64_t>(worldseed >> 32);
+    int64_t worldseedLower32 = static_cast<int64_t>(static_cast<int32_t>(worldseed));
 
-    // Java-like signed arithmetic
-    int64_t term1 = 24667315 * a_high + b * a_low + 67552711;
-    int64_t term2 = -4824621 * a_high + d * a_low + d;
-    int64_t part1 = (d * (term1 >> 32) - b * (term2 >> 32)) - 11;
+    // Calculate the equivalent state in the exact middle of the (theoretical) nextLong() call
+    // (This seems to use some lattice magic that no one bothers to explain)
+    int64_t term1 = 24667315 * worldseedUpper32 + 18218081 * worldseedLower32 + 67552711;
+    int64_t term2 = -4824621 * worldseedUpper32 +  7847617 * worldseedLower32 +  7847617;
+    int64_t nextLongMiddleState = 7847617 * (term1 >> 32) - 18218081 * (term2 >> 32); // Technically should be moduloed, but there's no point since all uses are moduloed later
 
-    // Emulate signed overflow using (int64_t) multiplication and modulo
-    int64_t e = (part1 * 0xdfe05bcb1365LL) % c;
-
-    // Perform the calculation as in Java
-    int64_t result = ((((0x5deece66dLL * e + 11) % c) >> 16) << 32);
-    result += (int32_t)(((0xbb20b4600a69LL * e + 0x40942de6baLL) % c) >> 16);
-
-    return (uint64_t)result == a;
+    // Then finish emulating nextLong() and return whether the result matches the original input.
+    int64_t nextLongValue = ((nextLongMiddleState % LCG_MODULO) >> 16) << 32;
+    nextLongValue += static_cast<int64_t>(static_cast<int32_t>(((LCG_MULTIPLIER * nextLongMiddleState + LCG_ADDEND) % LCG_MODULO) >> 16));
+    return static_cast<uint64_t>(nextLongValue) == worldseed;
 }
 
 /*
@@ -268,10 +266,15 @@ int main(void) {
 #ifdef _WIN32
     WIN32_FIND_DATA findFileData;
     HANDLE hFind;
-    char searchPattern[256];
-
-    snprintf(searchPattern, sizeof(searchPattern), "%s/*.txt", inputDir);
-    hFind = FindFirstFile(searchPattern, &findFileData);
+    #ifdef UNICODE
+        WCHAR searchPattern[256];
+        swprintf(searchPattern, sizeof(searchPattern)/sizeof(*searchPattern), reinterpret_cast<wchar_t *>("%s/*.txt"), inputDir);
+        hFind = FindFirstFileW(searchPattern, &findFileData);
+    #else
+        char searchPattern[256];
+        snprintf(searchPattern, sizeof(searchPattern)/sizeof(*searchPattern), "%s/*.txt", inputDir);
+        hFind = FindFirstFileA(searchPattern, &findFileData);
+    #endif
 
     if (hFind == INVALID_HANDLE_VALUE) {
         printf("FindFirstFile failed (%d)\n", GetLastError());
